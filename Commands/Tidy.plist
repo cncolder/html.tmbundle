@@ -9,63 +9,39 @@
 	<key>capturePattern</key>
 	<string>line (\d+) column (\d+) - (.*?)$</string>
 	<key>command</key>
-	<string>#!/usr/bin/env ruby18  -wKU
+	<string>#!/usr/bin/env node
 
-require ENV['TM_SUPPORT_PATH'] + '/lib/ui.rb'
-require ENV['TM_SUPPORT_PATH'] + '/lib/exit_codes.rb'
+var fs = require('fs');
+var path = require('path');
+var jsbeautify = path.join(process.env.TM_BUNDLE_SUPPORT, 'js');
+var beautify_html = require(jsbeautify).html;
 
-result = `"${TM_TIDY:-tidy}" -f /tmp/tm_tidy_errors -iq -utf8 \
-          -wrap 0 --tab-size $TM_TAB_SIZE --indent-spaces $TM_TAB_SIZE \
-		--indent yes \
-          ${TM_XHTML:+-asxhtml --output-xhtml yes} \
-          ${TM_SELECTED_TEXT:+--show-body-only yes} \
-          --enclose-text yes \
-          --doctype strict \
-		--wrap-php no \
-          --tidy-mark no`
-status = $?.exitstatus
+var opts = {
+	'preserve-newlines': true,
+};
 
-at_exit { File.unlink('/tmp/tm_tidy_errors') } # Clean up error log
+if (process.env.TM_SOFT_TABS == 'no') {
+	opts.indent_size = 1;
+	opts.indent_char = '\t';
+} else {
+	opts.indent_size = parseInt(process.env.TM_TAB_SIZE, 10);
+}
 
-if status == 2 # Errors
+var content = '';
 
-  msg = "Errors: " + File.read('/tmp/tm_tidy_errors')
-  TextMate.exit_show_tool_tip msg
+process.stdin.setEncoding('utf8');
 
-elsif status == 1 # Warnings - use output but also display notification with warnings
-  
-  log = File.read('/tmp/tm_tidy_errors').to_a.select do |line|
-    ! (ENV['TM_SELECTED_TEXT'] and (line.include?('Warning: missing &lt;!DOCTYPE&gt; declaration') or line.include?("Warning: inserting missing 'title' element")))
-  end.join rescue nil
-  
-  unless log.empty?
-    options = {
-      :title   =&gt; "Tidy Warnings",
-      :summary =&gt; "Warnings for tidying your document (press escape to close):",
-      :log     =&gt; log
-    }
-    TextMate::UI.simple_notification(options)
-  end
+process.stdin.on('readable', function() {
+  var chunk = process.stdin.read();
+  if (chunk !== null) {
+    content += chunk;
+  }
+});
 
-end
-
-if ENV['TM_SOFT_TABS'] == "YES"
-  print result
-else
-  in_pre = false
-  result.each_line do |line|
-    unless in_pre
-      tab_size = ENV["TM_TAB_SIZE"].to_i
-      space, text = /( *)(.*)/m.match(line)[1..2]
-      line = "\t" * (space.length / tab_size).floor + " "  * (space.length % tab_size) + text
-    end
-    
-    print line
-  
-    in_pre = true  if line.include?("&lt;pre&gt;")
-    in_pre = false if line.include?("&lt;/pre&gt;")
-  end
-end</string>
+process.stdin.on('end', function() {
+  process.stdout.write(beautify_html(content, opts));
+});
+</string>
 	<key>input</key>
 	<string>selection</string>
 	<key>keyEquivalent</key>
